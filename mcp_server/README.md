@@ -1,5 +1,8 @@
 # Graphiti MCP Server
 
+> ⚠️ **SECURITY WARNING**
+> This MCP server has NO built-in authentication. It should ONLY be deployed in trusted network environments (localhost, private networks, behind VPN/firewall). Do NOT expose this server directly to the public internet.
+
 Graphiti is a framework for building and querying temporally-aware knowledge graphs, specifically tailored for AI agents
 operating in dynamic environments. Unlike traditional retrieval-augmented generation (RAG) methods, Graphiti
 continuously integrates user interactions, structured and unstructured enterprise data, and external information into a
@@ -432,6 +435,94 @@ GRAPHITI_TELEMETRY_ENABLED=false
 ```
 
 For complete details about what's collected and why, see the [Telemetry section in the main Graphiti README](../README.md#telemetry).
+
+## Security Model
+
+### Network Security
+
+**This MCP server has NO built-in authentication or authorization.** It is designed for deployment in trusted network environments only.
+
+**Recommended Deployment Scenarios:**
+- Localhost development (127.0.0.1)
+- Private networks behind VPN
+- Internal networks with firewall protection
+- Docker containers with restricted network access
+
+**DO NOT:**
+- Expose the MCP server directly to the public internet
+- Deploy without additional authentication layers in production
+- Use in multi-tenant environments without isolation
+
+### Authentication Status
+
+**Current State:** No authentication implemented
+
+The MCP protocol itself does not currently specify authentication mechanisms. This server relies on network-level security (firewalls, VPNs) for access control.
+
+**Future Considerations:**
+- MCP protocol may add authentication in future versions
+- Custom authentication layers can be added via reverse proxy (nginx, Caddy)
+- Consider using mTLS for service-to-service communication
+
+### Input Validation
+
+The server implements input validation to prevent common injection attacks:
+
+**Group ID Validation:**
+- Prevents RedisSearch injection (FalkorDB backend)
+- Only allows alphanumeric characters, hyphens, and underscores
+- Applied to: `add_memory`, `search_memory_nodes`, `search_memory_facts`, `get_episodes`
+
+**UUID Validation:**
+- Ensures proper UUID format
+- Prevents database errors from malformed inputs
+- Applied to: `delete_entity_edge`, `delete_episode`, `get_entity_edge`
+
+**Log Sanitization:**
+- Automatically redacts API keys, passwords, and tokens from logs
+- Prevents accidental secret exposure in error messages
+
+### Known Limitations
+
+1. **No Rate Limiting:** Server does not implement rate limiting. Rely on network-level protections.
+2. **No Request Signing:** Requests are not cryptographically signed.
+3. **No Audit Logging:** User actions are not logged for compliance purposes.
+4. **No Input Size Limits:** Large payloads could cause memory issues.
+5. **No CORS Configuration:** SSE transport does not configure CORS headers.
+
+### Security Best Practices
+
+When deploying this MCP server:
+
+1. **Network Isolation:**
+   - Run behind a firewall
+   - Use VPN for remote access
+   - Consider Docker network isolation
+
+2. **Secrets Management:**
+   - Never commit API keys to version control
+   - Use environment variables for secrets
+   - Rotate API keys regularly
+
+3. **Database Security:**
+   - Use strong Neo4j/FalkorDB passwords
+   - Restrict database network access
+   - Enable database authentication
+
+4. **Monitoring:**
+   - Monitor logs for suspicious patterns
+   - Set up alerts for error spikes
+   - Review access logs regularly
+
+5. **Updates:**
+   - Keep dependencies updated
+   - Monitor security advisories
+   - Update Graphiti and MCP regularly
+
+For production deployments requiring authentication, consider:
+- Reverse proxy with authentication (OAuth2, API keys)
+- Service mesh (Istio, Linkerd) for mTLS
+- VPN or private network requirements
 
 ## License
 

@@ -7,7 +7,9 @@ import argparse
 import asyncio
 import logging
 import os
+import re
 import sys
+import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any, cast
@@ -467,6 +469,7 @@ class Neo4jConfig(BaseModel):
             password=os.environ.get('NEO4J_PASSWORD', 'password'),
         )
 
+
 class FalkorConfig(BaseModel):
     """Configuration for FalkorDB database connection."""
 
@@ -482,6 +485,7 @@ class FalkorConfig(BaseModel):
         user = os.environ.get('FALKORDB_USER', '')
         password = os.environ.get('FALKORDB_PASSWORD', '')
         return cls(host=host, port=port, user=user, password=password)
+
 
 class GraphitiConfig(BaseModel):
     """Configuration for Graphiti client.
@@ -504,7 +508,9 @@ class GraphitiConfig(BaseModel):
         """Create a configuration instance from environment variables."""
         db_type = os.environ.get('DATABASE_TYPE')
         if not db_type:
-            raise ValueError('DATABASE_TYPE environment variable must be set (e.g., "neo4j" or "falkordb")')
+            raise ValueError(
+                'DATABASE_TYPE environment variable must be set (e.g., "neo4j" or "falkordb")'
+            )
         if db_type == 'neo4j':
             return cls(
                 llm=GraphitiLLMConfig.from_env(),
@@ -561,6 +567,121 @@ logging.basicConfig(
     stream=sys.stderr,
 )
 logger = logging.getLogger(__name__)
+
+
+# Log sanitization filter for MCP server security
+class SensitiveDataFilter(logging.Filter):
+    """Logging filter to redact sensitive information from log messages.
+
+    This filter prevents accidental exposure of API keys, passwords, tokens,
+    and other sensitive data in application logs.
+    """
+
+    # Pattern definitions: (regex_pattern, replacement_string)
+    PATTERNS = [
+        # OpenAI API keys (sk-...)
+        (re.compile(r'sk-[a-zA-Z0-9]{20,}'), '[REDACTED_OPENAI_KEY]'),
+        # Generic API keys in environment variable format
+        (re.compile(r'OPENAI_API_KEY\s*=\s*\S+', re.IGNORECASE), 'OPENAI_API_KEY=[REDACTED]'),
+        (re.compile(r'API_KEY\s*=\s*\S+', re.IGNORECASE), 'API_KEY=[REDACTED]'),
+        # Azure OpenAI keys
+        (re.compile(r'AZURE_OPENAI.*?KEY\s*=\s*\S+', re.IGNORECASE), 'AZURE_OPENAI_KEY=[REDACTED]'),
+        # Password patterns in environment variable format
+        (re.compile(r'PASSWORD\s*=\s*\S+', re.IGNORECASE), 'PASSWORD=[REDACTED]'),
+        (re.compile(r'NEO4J_PASSWORD\s*=\s*\S+', re.IGNORECASE), 'NEO4J_PASSWORD=[REDACTED]'),
+        (re.compile(r'FALKORDB_PASSWORD\s*=\s*\S+', re.IGNORECASE), 'FALKORDB_PASSWORD=[REDACTED]'),
+        # Bearer tokens
+        (re.compile(r'Bearer\s+[a-zA-Z0-9\-._~+/]+=*', re.IGNORECASE), 'Bearer [REDACTED_TOKEN]'),
+        # Authorization headers
+        (re.compile(r'Authorization:\s*\S+', re.IGNORECASE), 'Authorization: [REDACTED]'),
+        # JWT tokens (roughly matches JWT format)
+        (re.compile(r'eyJ[a-zA-Z0-9_-]+\.eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+'), '[REDACTED_JWT]'),
+    ]
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Filter log record to redact sensitive data.
+
+        Args:
+            record: The log record to filter
+
+        Returns:
+            True to allow the record to be logged (always True)
+        """
+        # Redact sensitive data from the message
+        if isinstance(record.msg, str):
+            for pattern, replacement in self.PATTERNS:
+                record.msg = pattern.sub(replacement, record.msg)
+
+        # Redact sensitive data from args if present
+        if record.args:
+            # Convert args tuple to list for modification
+            sanitized_args = []
+            for arg in record.args:
+                if isinstance(arg, str):
+                    sanitized_arg = arg
+                    for pattern, replacement in self.PATTERNS:
+                        sanitized_arg = pattern.sub(replacement, sanitized_arg)
+                    sanitized_args.append(sanitized_arg)
+                else:
+                    sanitized_args.append(arg)
+            record.args = tuple(sanitized_args)
+
+        return True
+
+
+# Apply the sensitive data filter to the root logger
+logging.getLogger().addFilter(SensitiveDataFilter())
+
+
+# Validation functions for MCP server security
+def validate_group_id_mcp(group_id: str | None) -> str:
+    """Validate group_id for MCP server to prevent RedisSearch injection.
+
+    FalkorDB uses RedisSearch for fulltext queries, and the group_id is directly
+    interpolated into search queries without sanitization. This function ensures
+    that group_ids only contain safe characters.
+
+    Args:
+        group_id: The group_id to validate
+
+    Returns:
+        The validated group_id string
+
+    Raises:
+        ValueError: If group_id is None, empty, or contains invalid characters
+    """
+    if not group_id:
+        raise ValueError('group_id is required')
+
+    # Only allow alphanumeric characters, hyphens, and underscores
+    # This prevents RedisSearch special characters: @, -, |, (, ), {, }, [, ], ", ~, *, :, \, etc.
+    if not re.match(r'^[a-zA-Z0-9_-]+$', group_id):
+        raise ValueError(
+            f"Invalid group_id '{group_id}'. Must contain only alphanumeric characters, "
+            'hyphens, and underscores.'
+        )
+
+    return group_id
+
+
+def validate_uuid_mcp(uuid_str: str) -> str:
+    """Validate UUID format for MCP server.
+
+    Args:
+        uuid_str: The UUID string to validate
+
+    Returns:
+        The validated UUID string
+
+    Raises:
+        ValueError: If uuid_str is not a valid UUID format
+    """
+    try:
+        uuid.UUID(uuid_str)
+        return uuid_str
+    except (ValueError, AttributeError) as e:
+        raise ValueError(f"Invalid UUID '{uuid_str}'. Must be a valid UUID format.") from e
+
 
 # Create global config instance - will be properly initialized later
 config = GraphitiConfig()
@@ -622,7 +743,9 @@ async def initialize_graphiti():
             raise ValueError('NEO4J_URI, NEO4J_USER, and NEO4J_PASSWORD must be set')
 
         # Validate FalkorDB configuration
-        if config.database_type == 'falkordb' and (not config.falkordb.host or not config.falkordb.port):
+        if config.database_type == 'falkordb' and (
+            not config.falkordb.host or not config.falkordb.port
+        ):
             raise ValueError('FALKORDB_HOST and FALKORDB_PORT must be set for FalkorDB')
 
         embedder_client = config.embedder.create_client()
@@ -637,6 +760,7 @@ async def initialize_graphiti():
             )
         elif config.database_type == 'falkordb':
             from graphiti_core.driver.falkordb_driver import FalkorDriver
+
             host = config.falkordb.host if hasattr(config.falkordb, 'host') else 'localhost'
             port = int(config.falkordb.port) if hasattr(config.falkordb, 'port') else 6379
             username = config.falkordb.user or None
@@ -818,19 +942,21 @@ async def add_memory(
         return ErrorResponse(error='Graphiti client not initialized')
 
     try:
+        # Use the provided group_id or fall back to the default from config
+        effective_group_id = group_id if group_id is not None else config.group_id
+
+        # Validate group_id to prevent RedisSearch injection
+        try:
+            group_id_str = validate_group_id_mcp(effective_group_id)
+        except ValueError as e:
+            return ErrorResponse(error=str(e))
+
         # Map string source to EpisodeType enum
         source_type = EpisodeType.text
         if source.lower() == 'message':
             source_type = EpisodeType.message
         elif source.lower() == 'json':
             source_type = EpisodeType.json
-
-        # Use the provided group_id or fall back to the default from config
-        effective_group_id = group_id if group_id is not None else config.group_id
-
-        # Cast group_id to str to satisfy type checker
-        # The Graphiti client expects a str for group_id, not Optional[str]
-        group_id_str = str(effective_group_id) if effective_group_id is not None else ''
 
         # We've already checked that graphiti_client is not None above
         # This assert statement helps type checkers understand that graphiti_client is defined
@@ -917,6 +1043,12 @@ async def search_memory_nodes(
             group_ids if group_ids is not None else [config.group_id] if config.group_id else []
         )
 
+        # Validate all group_ids to prevent RedisSearch injection
+        try:
+            validated_group_ids = [validate_group_id_mcp(gid) for gid in effective_group_ids]
+        except ValueError as e:
+            return ErrorResponse(error=str(e))
+
         # Configure the search
         if center_node_uuid is not None:
             search_config = NODE_HYBRID_SEARCH_NODE_DISTANCE.model_copy(deep=True)
@@ -938,7 +1070,7 @@ async def search_memory_nodes(
         search_results = await client._search(
             query=query,
             config=search_config,
-            group_ids=effective_group_ids,
+            group_ids=validated_group_ids,
             center_node_uuid=center_node_uuid,
             search_filter=filters,
         )
@@ -997,6 +1129,12 @@ async def search_memory_facts(
             group_ids if group_ids is not None else [config.group_id] if config.group_id else []
         )
 
+        # Validate all group_ids to prevent RedisSearch injection
+        try:
+            validated_group_ids = [validate_group_id_mcp(gid) for gid in effective_group_ids]
+        except ValueError as e:
+            return ErrorResponse(error=str(e))
+
         # We've already checked that graphiti_client is not None above
         assert graphiti_client is not None
 
@@ -1004,7 +1142,7 @@ async def search_memory_facts(
         client = cast(Graphiti, graphiti_client)
 
         relevant_edges = await client.search(
-            group_ids=effective_group_ids,
+            group_ids=validated_group_ids,
             query=query,
             num_results=max_facts,
             center_node_uuid=center_node_uuid,
@@ -1033,6 +1171,12 @@ async def delete_entity_edge(uuid: str) -> SuccessResponse | ErrorResponse:
     if graphiti_client is None:
         return ErrorResponse(error='Graphiti client not initialized')
 
+    # Validate UUID format
+    try:
+        validated_uuid = validate_uuid_mcp(uuid)
+    except ValueError as e:
+        return ErrorResponse(error=str(e))
+
     try:
         # We've already checked that graphiti_client is not None above
         assert graphiti_client is not None
@@ -1041,10 +1185,12 @@ async def delete_entity_edge(uuid: str) -> SuccessResponse | ErrorResponse:
         client = cast(Graphiti, graphiti_client)
 
         # Get the entity edge by UUID
-        entity_edge = await EntityEdge.get_by_uuid(client.driver, uuid)
+        entity_edge = await EntityEdge.get_by_uuid(client.driver, validated_uuid)
         # Delete the edge using its delete method
         await entity_edge.delete(client.driver)
-        return SuccessResponse(message=f'Entity edge with UUID {uuid} deleted successfully')
+        return SuccessResponse(
+            message=f'Entity edge with UUID {validated_uuid} deleted successfully'
+        )
     except Exception as e:
         error_msg = str(e)
         logger.error(f'Error deleting entity edge: {error_msg}')
@@ -1063,6 +1209,12 @@ async def delete_episode(uuid: str) -> SuccessResponse | ErrorResponse:
     if graphiti_client is None:
         return ErrorResponse(error='Graphiti client not initialized')
 
+    # Validate UUID format
+    try:
+        validated_uuid = validate_uuid_mcp(uuid)
+    except ValueError as e:
+        return ErrorResponse(error=str(e))
+
     try:
         # We've already checked that graphiti_client is not None above
         assert graphiti_client is not None
@@ -1071,10 +1223,10 @@ async def delete_episode(uuid: str) -> SuccessResponse | ErrorResponse:
         client = cast(Graphiti, graphiti_client)
 
         # Get the episodic node by UUID - EpisodicNode is already imported at the top
-        episodic_node = await EpisodicNode.get_by_uuid(client.driver, uuid)
+        episodic_node = await EpisodicNode.get_by_uuid(client.driver, validated_uuid)
         # Delete the node using its delete method
         await episodic_node.delete(client.driver)
-        return SuccessResponse(message=f'Episode with UUID {uuid} deleted successfully')
+        return SuccessResponse(message=f'Episode with UUID {validated_uuid} deleted successfully')
     except Exception as e:
         error_msg = str(e)
         logger.error(f'Error deleting episode: {error_msg}')
@@ -1093,6 +1245,12 @@ async def get_entity_edge(uuid: str) -> dict[str, Any] | ErrorResponse:
     if graphiti_client is None:
         return ErrorResponse(error='Graphiti client not initialized')
 
+    # Validate UUID format
+    try:
+        validated_uuid = validate_uuid_mcp(uuid)
+    except ValueError as e:
+        return ErrorResponse(error=str(e))
+
     try:
         # We've already checked that graphiti_client is not None above
         assert graphiti_client is not None
@@ -1101,7 +1259,7 @@ async def get_entity_edge(uuid: str) -> dict[str, Any] | ErrorResponse:
         client = cast(Graphiti, graphiti_client)
 
         # Get the entity edge directly using the EntityEdge class method
-        entity_edge = await EntityEdge.get_by_uuid(client.driver, uuid)
+        entity_edge = await EntityEdge.get_by_uuid(client.driver, validated_uuid)
 
         # Use the format_fact_result function to serialize the edge
         # Return the Python dict directly - MCP will handle serialization
@@ -1134,6 +1292,12 @@ async def get_episodes(
         if not isinstance(effective_group_id, str):
             return ErrorResponse(error='Group ID must be a string')
 
+        # Validate group_id to prevent RedisSearch injection
+        try:
+            validated_group_id = validate_group_id_mcp(effective_group_id)
+        except ValueError as e:
+            return ErrorResponse(error=str(e))
+
         # We've already checked that graphiti_client is not None above
         assert graphiti_client is not None
 
@@ -1141,12 +1305,12 @@ async def get_episodes(
         client = cast(Graphiti, graphiti_client)
 
         episodes = await client.retrieve_episodes(
-            group_ids=[effective_group_id], last_n=last_n, reference_time=datetime.now(timezone.utc)
+            group_ids=[validated_group_id], last_n=last_n, reference_time=datetime.now(timezone.utc)
         )
 
         if not episodes:
             return EpisodeSearchResponse(
-                message=f'No episodes found for group {effective_group_id}', episodes=[]
+                message=f'No episodes found for group {validated_group_id}', episodes=[]
             )
 
         # Use Pydantic's model_dump method for EpisodicNode serialization
@@ -1205,10 +1369,11 @@ async def get_status() -> StatusResponse:
         client = cast(Graphiti, graphiti_client)
 
         # Test database connection
-        await client.driver.health_check() # type: ignore  # type: ignore
+        await client.driver.health_check()  # type: ignore  # type: ignore
 
         return StatusResponse(
-            status='ok', message=f'Graphiti MCP server is running and connected to {config.database_type}'
+            status='ok',
+            message=f'Graphiti MCP server is running and connected to {config.database_type}',
         )
     except Exception as e:
         error_msg = str(e)
