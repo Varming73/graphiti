@@ -250,21 +250,30 @@ Transform the Graphiti MCP Server from a functional proof-of-concept into a prod
 
 ## Change Management
 
-**Version Control:**
-- All changes committed to Git with descriptive messages
-- Each session's work in separate commits
-- Reference session number in commit messages
+**Version Control Strategy:**
+- **Model:** Fork workflow (origin = Varming73/graphiti, upstream = getzep/graphiti)
+- **Verified:** Upstream has NO dev branch (uses main + feature branches)
+- **Feature Branches:** Each session in separate feature branch (feature/session-X-description)
+- **Main Branch:** Contains tested, production-ready code
+- **Detailed Workflow:** See [GIT_WORKFLOW.md](GIT_WORKFLOW.md)
+
+**Commit Standards:**
+- Conventional commits format: `type(scope): description`
+- Descriptive messages with session references
+- Co-authored by Claude Code
 
 **Documentation Updates:**
 - CHANGELOG.md updated after each session
 - SESSION_LOG.md tracks progress
 - README updates for new features/requirements
+- GIT_WORKFLOW.md for workflow guidance
 
 **Upstream Compatibility:**
 - Prefer configuration over code changes
 - Keep modifications isolated and well-documented
 - Avoid refactoring existing Graphiti core code
 - Extensions over modifications
+- Periodic sync with upstream/main (weekly or before major features)
 
 ---
 
