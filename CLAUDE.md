@@ -111,6 +111,66 @@ docker-compose up
 
 ## Development Guidelines
 
+### Security Guidelines
+
+Protect sensitive data and prevent common vulnerabilities:
+
+- **Secrets Management**
+  - Never commit API keys, tokens, or credentials to git
+  - Use `.env` files for local development (ensure `.env` is in `.gitignore`)
+  - Use environment variables for all sensitive configuration
+  - Audit code before committing to ensure no secrets are exposed
+
+- **Database Security**
+  - Sanitize all user inputs before using in Cypher queries
+  - Use parameterized queries to prevent Cypher injection (both Neo4j and FalkorDB support this)
+  - For FalkorDB fulltext search: Always use the driver's `sanitize()` method to escape RedisSearch special characters
+  - **Important for FalkorDB group_ids**: The `build_fulltext_query()` method does NOT sanitize group_ids before string interpolation. Always validate that group_ids contain only expected characters (alphanumeric, hyphens, underscores) before passing to this method. Never pass raw user input as group_ids without validation.
+  - Avoid exposing raw database errors to users (information leakage)
+
+- **LLM Security**
+  - Be aware of prompt injection risks when user input flows to LLMs
+  - Validate and sanitize user input before including in prompts
+  - Don't blindly trust LLM outputs (validate before executing)
+  - Log suspicious patterns but never log API keys or sensitive data
+
+### AI/LLM Best Practices
+
+Handle LLM integrations safely and efficiently:
+
+- **Output Validation**
+  - Always validate LLM responses against expected schemas
+  - Handle malformed or incomplete responses gracefully
+  - Use structured output modes when available (OpenAI, Gemini)
+  - Have fallback strategies for validation failures
+
+- **Error Handling**
+  - Wrap LLM API calls in try/except blocks
+  - Handle rate limits, timeouts, and API errors gracefully
+  - Provide meaningful error messages without exposing internals
+  - Consider retry logic with exponential backoff for transient failures
+
+- **Cost & Performance**
+  - Be mindful of token usage in prompts and outputs
+  - Use appropriate models for each task (don't over-provision)
+  - Cache embeddings and LLM results where appropriate
+  - Monitor API costs in production environments
+
+- **Prompt Engineering**
+  - Keep prompts clear, specific, and concise
+  - Test prompts with edge cases and unusual inputs
+  - Version control prompts alongside code changes
+  - Document prompt design decisions in comments
+
+### Upstream Compatibility
+
+Minimize divergence from the upstream repository to facilitate merging future updates:
+
+- Prefer configuration over code changes where possible
+- Keep modifications isolated and well-documented
+- Avoid refactoring existing code unless necessary
+- Add custom features as extensions rather than modifications
+
 ### Code Style
 
 - Use Ruff for formatting and linting (configured in pyproject.toml)
