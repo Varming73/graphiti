@@ -31,7 +31,7 @@ WORKDIR /app/mcp
 ARG GRAPHITI_CORE_VERSION=0.22.0
 
 # Copy project files for dependency installation
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock README.md ./
 
 # Remove the local path override for graphiti-core in Docker builds
 # Install with database drivers and all lightweight API client extras for maximum flexibility
