@@ -560,9 +560,9 @@ The Graphiti MCP server exposes the following tools:
 
 ### Core Tools
 
-- `add_episode`: Add an episode to the knowledge graph (supports text, JSON, and message formats)
+- `add_memory`: Add an episode to the knowledge graph (supports text, JSON, and message formats)
 - `search_nodes`: Search the knowledge graph for relevant node summaries
-- `search_facts`: Search the knowledge graph for relevant facts (edges between entities)
+- `search_memory_facts`: Search the knowledge graph for relevant facts (edges between entities)
 - `delete_entity_edge`: Delete an entity edge from the knowledge graph
 - `delete_episode`: Delete an episode from the knowledge graph
 - `get_entity_edge`: Get an entity edge by its UUID
@@ -580,6 +580,18 @@ The Graphiti MCP server exposes the following tools:
   - Filter by group IDs and search query
   - Example: `get_entities_by_type(entity_types=["Preference", "Requirement"])`
 
+- **`get_entity_connections`**: Get ALL relationships connected to a specific entity
+  - Complete graph traversal - returns every relationship where the entity is involved
+  - Essential for exploring what's already known before adding new information
+  - Guarantees completeness (unlike semantic search which may miss connections)
+  - Example: `get_entity_connections(entity_uuid="abc-123", max_connections=50)`
+
+- **`get_entity_timeline`**: Get chronological episode history for an entity
+  - Shows ALL episodes where this entity was mentioned, in chronological order
+  - Understand how entity was discussed across conversations
+  - Track evolution of concepts, decisions, or any tracked entity over time
+  - Example: `get_entity_timeline(entity_uuid="abc-123", max_episodes=20)`
+
 - **`compare_facts_over_time`**: Track knowledge evolution between time periods
   - Compare facts valid at different points in time
   - Returns facts added, facts invalidated, and facts that remained valid
@@ -588,12 +600,12 @@ The Graphiti MCP server exposes the following tools:
 
 ## Working with JSON Data
 
-The Graphiti MCP server can process structured JSON data through the `add_episode` tool with `source="json"`. This
+The Graphiti MCP server can process structured JSON data through the `add_memory` tool with `source="json"`. This
 allows you to automatically extract entities and relationships from structured data:
 
 ```
 
-add_episode(
+add_memory(
 name="Customer Profile",
 episode_body="{\"company\": {\"name\": \"Acme Technologies\"}, \"products\": [{\"id\": \"P001\", \"name\": \"CloudSync\"}, {\"id\": \"P002\", \"name\": \"DataMiner\"}]}",
 source="json",
