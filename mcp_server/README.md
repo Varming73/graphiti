@@ -505,11 +505,49 @@ VS Code with GitHub Copilot Chat extension supports MCP servers. Add to your VS 
 
 ### Other MCP Clients
 
-To use the Graphiti MCP server with other MCP-compatible clients, configure it to connect to the server:
+#### Option 1: Using Published PyPI Package (Recommended)
+
+The simplest way to use Graphiti MCP is via the published PyPI package with `uvx`:
 
 > [!IMPORTANT]
 > You will need the Python package manager, `uv` installed. Please refer to the [`uv` install instructions](https://docs.astral.sh/uv/getting-started/installation/).
->
+
+```json
+{
+  "mcpServers": {
+    "graphiti-mcp": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "graphiti-mcp-varming[api-providers]"
+      ],
+      "env": {
+        "NEO4J_URI": "bolt://localhost:7687",
+        "NEO4J_USER": "neo4j",
+        "NEO4J_PASSWORD": "password",
+        "OPENAI_API_KEY": "sk-XXXXXXXX"
+      }
+    }
+  }
+}
+```
+
+**Available Extras:**
+- `api-providers` - Lightweight API clients (Anthropic, Gemini, Groq, Voyage) - **Recommended**
+- `providers` - All API clients + sentence-transformers (large, for local embeddings)
+- `falkordb` - FalkorDB database support
+- `all` - All optional features
+
+**Note:** Neo4j support is included by default. For FalkorDB, use:
+```json
+"args": ["graphiti-mcp-varming[api-providers,falkordb]"]
+```
+
+#### Option 2: Running from Cloned Repository
+
+To run from a cloned repository:
+
+> [!IMPORTANT]
 > Ensure that you set the full path to the `uv` binary and your Graphiti project folder.
 
 ```json
