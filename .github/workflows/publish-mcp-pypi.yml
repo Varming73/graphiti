@@ -28,9 +28,15 @@ jobs:
       - name: Build package
         working-directory: mcp_server
         run: |
+          # Verify README.md exists (required by pyproject.toml)
+          if [ ! -f README.md ]; then
+            echo "ERROR: README.md not found in mcp_server directory"
+            exit 1
+          fi
+
           # Remove local graphiti-core override for PyPI build
           sed -i '/\[tool\.uv\.sources\]/,/graphiti-core/d' pyproject.toml
-          
+
           # Build the package
           uv build
 
