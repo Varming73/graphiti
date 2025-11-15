@@ -336,15 +336,12 @@ class GraphitiService:
     async def shutdown(self) -> None:
         """Clean shutdown of Graphiti service.
 
-        Closes database connections and cancels queue workers.
+        Closes database connections.
+        Note: Queue service is a global and should be shutdown separately.
         """
         logger.info('Shutting down Graphiti service...')
 
         try:
-            # Cancel all queue workers
-            if self.queue_service:
-                await self.queue_service.shutdown()
-
             # Close Graphiti client (which closes the driver)
             if self.client and self.client.driver:
                 logger.info('Closing Neo4j driver...')
