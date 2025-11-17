@@ -77,6 +77,8 @@ else:
 #
 # DEFAULT: 10 (suitable for OpenAI Tier 3, mid-tier Anthropic)
 SEMAPHORE_LIMIT = int(os.getenv('SEMAPHORE_LIMIT', 10))
+# Maximum allowed results for query parameters (prevents DoS via memory exhaustion)
+MAX_ALLOWED_RESULTS = 1000
 
 
 # Configure structured logging with timestamps
@@ -454,17 +456,40 @@ class GraphitiService:
     async def shutdown(self) -> None:
         """Clean shutdown of Graphiti service.
 
-        Closes database connections.
+        Closes all resources:
+        - LLM client connections
+        - Embedder client connections
+        - Database driver connections
+
         Note: Queue service is a global and should be shutdown separately.
         """
         logger.info('Shutting down Graphiti service...')
 
         try:
-            # Close Graphiti client (which closes the driver)
-            if self.client and self.client.driver:
-                logger.info('Closing Neo4j driver...')
-                await self.client.driver.close()
-                logger.info('Neo4j driver closed successfully')
+            if self.client:
+                # Close LLM client if it has a close method
+                if self.client.llm_client and hasattr(self.client.llm_client, 'close'):
+                    try:
+                        logger.info('Closing LLM client...')
+                        await self.client.llm_client.close()
+                        logger.info('LLM client closed successfully')
+                    except Exception as e:
+                        logger.warning(f'Error closing LLM client: {e}')
+
+                # Close embedder client if it has a close method
+                if self.client.embedder and hasattr(self.client.embedder, 'close'):
+                    try:
+                        logger.info('Closing embedder client...')
+                        await self.client.embedder.close()
+                        logger.info('Embedder client closed successfully')
+                    except Exception as e:
+                        logger.warning(f'Error closing embedder client: {e}')
+
+                # Close database driver
+                if self.client.driver:
+                    logger.info('Closing database driver...')
+                    await self.client.driver.close()
+                    logger.info('Database driver closed successfully')
 
         except Exception as e:
             logger.error(f'Error during shutdown: {e}')
@@ -553,13 +578,20 @@ async def add_memory(
         add_memory(
             name="Customer preference",
             episode_body="Acme Corp prefers Slack communication",
-            uuid="abc-123-def-456"  # UUID from previous get_episodes or search
+            uuid="550e8400-e29b-41d4-a716-446655440000"  # UUID from previous get_episodes or search
         )
     """
     global graphiti_service, queue_service
 
     if graphiti_service is None or queue_service is None:
         return ErrorResponse(error='Services not initialized')
+
+    # Validate UUID format if provided
+    if uuid is not None:
+        try:
+            UUID(uuid)
+        except (ValueError, AttributeError):
+            return ErrorResponse(error='Invalid UUID format')
 
     try:
         # Use the provided group_id or fall back to the default from config
@@ -591,8 +623,8 @@ async def add_memory(
         )
     except Exception as e:
         error_msg = str(e)
-        logger.error(f'Error queuing episode: {error_msg}')
-        return ErrorResponse(error=f'Error queuing episode: {error_msg}')
+        logger.error(f'Error queuing episode: {error_msg}', exc_info=True)
+        return ErrorResponse(error='Failed to queue episode for processing. Please try again.')
 
 
 @mcp.tool(
@@ -655,6 +687,12 @@ async def search_nodes(
     if graphiti_service is None:
         return ErrorResponse(error='Graphiti service not initialized')
 
+    # Validate max_nodes parameter
+    if max_nodes > MAX_ALLOWED_RESULTS:
+        return ErrorResponse(error=f'max_nodes cannot exceed {MAX_ALLOWED_RESULTS}')
+    if max_nodes <= 0:
+        return ErrorResponse(error='max_nodes must be a positive integer')
+
     try:
         client = await graphiti_service.get_client()
 
@@ -711,8 +749,8 @@ async def search_nodes(
         return NodeSearchResponse(message='Nodes retrieved successfully', nodes=node_results)
     except Exception as e:
         error_msg = str(e)
-        logger.error(f'Error searching nodes: {error_msg}')
-        return ErrorResponse(error=f'Error searching nodes: {error_msg}')
+        logger.error(f'Error searching nodes: {error_msg}', exc_info=True)
+        return ErrorResponse(error='Failed to search nodes. Please try again.')
 
 
 @mcp.tool(
@@ -1242,6 +1280,12 @@ async def delete_entity_edge(uuid: str) -> SuccessResponse | ErrorResponse:
     if graphiti_service is None:
         return ErrorResponse(error='Graphiti service not initialized')
 
+    # Validate UUID format
+    try:
+        UUID(uuid)
+    except (ValueError, AttributeError):
+        return ErrorResponse(error='Invalid UUID format')
+
     try:
         client = await graphiti_service.get_client()
 
@@ -1252,8 +1296,8 @@ async def delete_entity_edge(uuid: str) -> SuccessResponse | ErrorResponse:
         return SuccessResponse(message=f'Entity edge with UUID {uuid} deleted successfully')
     except Exception as e:
         error_msg = str(e)
-        logger.error(f'Error deleting entity edge: {error_msg}')
-        return ErrorResponse(error=f'Error deleting entity edge: {error_msg}')
+        logger.error(f'Error deleting entity edge: {error_msg}', exc_info=True)
+        return ErrorResponse(error='Failed to delete entity edge. Please try again.')
 
 
 @mcp.tool(
@@ -1298,6 +1342,12 @@ async def delete_episode(uuid: str) -> SuccessResponse | ErrorResponse:
     if graphiti_service is None:
         return ErrorResponse(error='Graphiti service not initialized')
 
+    # Validate UUID format
+    try:
+        UUID(uuid)
+    except (ValueError, AttributeError):
+        return ErrorResponse(error='Invalid UUID format')
+
     try:
         client = await graphiti_service.get_client()
 
@@ -1308,8 +1358,8 @@ async def delete_episode(uuid: str) -> SuccessResponse | ErrorResponse:
         return SuccessResponse(message=f'Episode with UUID {uuid} deleted successfully')
     except Exception as e:
         error_msg = str(e)
-        logger.error(f'Error deleting episode: {error_msg}')
-        return ErrorResponse(error=f'Error deleting episode: {error_msg}')
+        logger.error(f'Error deleting episode: {error_msg}', exc_info=True)
+        return ErrorResponse(error='Failed to delete episode. Please try again.')
 
 
 @mcp.tool(
@@ -1346,6 +1396,12 @@ async def get_entity_edge(uuid: str) -> dict[str, Any] | ErrorResponse:
     if graphiti_service is None:
         return ErrorResponse(error='Graphiti service not initialized')
 
+    # Validate UUID format
+    try:
+        UUID(uuid)
+    except (ValueError, AttributeError):
+        return ErrorResponse(error='Invalid UUID format')
+
     try:
         client = await graphiti_service.get_client()
 
@@ -1357,8 +1413,8 @@ async def get_entity_edge(uuid: str) -> dict[str, Any] | ErrorResponse:
         return format_fact_result(entity_edge)
     except Exception as e:
         error_msg = str(e)
-        logger.error(f'Error getting entity edge: {error_msg}')
-        return ErrorResponse(error=f'Error getting entity edge: {error_msg}')
+        logger.error(f'Error getting entity edge: {error_msg}', exc_info=True)
+        return ErrorResponse(error='Failed to retrieve entity edge. Please try again.')
 
 
 @mcp.tool(
@@ -1414,6 +1470,19 @@ async def get_episodes(
     if graphiti_service is None:
         return ErrorResponse(error='Graphiti service not initialized')
 
+    # Validate max_episodes parameter
+    if max_episodes > MAX_ALLOWED_RESULTS:
+        return ErrorResponse(error=f'max_episodes cannot exceed {MAX_ALLOWED_RESULTS}')
+    if max_episodes <= 0:
+        return ErrorResponse(error='max_episodes must be a positive integer')
+
+    # Validate last_n parameter if provided
+    if last_n is not None:
+        if last_n > MAX_ALLOWED_RESULTS:
+            return ErrorResponse(error=f'last_n cannot exceed {MAX_ALLOWED_RESULTS}')
+        if last_n <= 0:
+            return ErrorResponse(error='last_n must be a positive integer')
+
     try:
         client = await graphiti_service.get_client()
 
@@ -1465,8 +1534,8 @@ async def get_episodes(
         )
     except Exception as e:
         error_msg = str(e)
-        logger.error(f'Error getting episodes: {error_msg}')
-        return ErrorResponse(error=f'Error getting episodes: {error_msg}')
+        logger.error(f'Error getting episodes: {error_msg}', exc_info=True)
+        return ErrorResponse(error='Failed to retrieve episodes. Please try again.')
 
 
 @mcp.tool(
@@ -1624,6 +1693,12 @@ async def get_entity_connections(
     except (ValueError, AttributeError):
         return ErrorResponse(error='Invalid UUID format provided for entity_uuid')
 
+    # Validate max_connections parameter
+    if max_connections > MAX_ALLOWED_RESULTS:
+        return ErrorResponse(error=f'max_connections cannot exceed {MAX_ALLOWED_RESULTS}')
+    if max_connections <= 0:
+        return ErrorResponse(error='max_connections must be a positive integer')
+
     try:
         client = await graphiti_service.get_client()
 
@@ -1733,6 +1808,12 @@ async def get_entity_timeline(
         UUID(entity_uuid)
     except (ValueError, AttributeError):
         return ErrorResponse(error='Invalid UUID format provided for entity_uuid')
+
+    # Validate max_episodes parameter
+    if max_episodes > MAX_ALLOWED_RESULTS:
+        return ErrorResponse(error=f'max_episodes cannot exceed {MAX_ALLOWED_RESULTS}')
+    if max_episodes <= 0:
+        return ErrorResponse(error='max_episodes must be a positive integer')
 
     try:
         client = await graphiti_service.get_client()

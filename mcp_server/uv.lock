@@ -647,8 +647,8 @@ wheels = [
 ]
 
 [[package]]
-name = "graphiti-core"
-version = "0.23.0"
+name = "graphiti-core-varming"
+version = "0.23.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "diskcache" },
@@ -660,9 +660,9 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "tenacity" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5d/1a/393d4d03202448e339abc698f20f8a74fa12ee7e8f810c8344af1e4415d7/graphiti_core-0.23.0.tar.gz", hash = "sha256:cf5c1f403e3b28f996a339f9eca445ad3f47e80ec9e4bc7672e73a6461db48c6", size = 6623570, upload-time = "2025-11-08T19:10:23.897Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f0/9c/60b848cdd6657a08f741058b84902f44e5274e4a05a0bca23e634ebc08cc/graphiti_core_varming-0.23.2.tar.gz", hash = "sha256:65ae0e0f9189868f29231ffff26bf813914263c0c010fb636566a5196155ccee", size = 6753636, upload-time = "2025-11-14T13:35:05.815Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9a/71/e4e70af3727bbcd5c1ee127a856960273b265e42318d71d1b4c9cf3ed9c2/graphiti_core-0.23.0-py3-none-any.whl", hash = "sha256:83235a83f87fd13e93fb9872e02c7702564ce8c11a8562dc8e683c302053dd46", size = 176125, upload-time = "2025-11-08T19:10:21.797Z" },
+    { url = "https://files.pythonhosted.org/packages/cb/6a/da1f6951452a0bea4ca4ffec2d610f75f08ee47adfcecdcd05caf8e07c6a/graphiti_core_varming-0.23.2-py3-none-any.whl", hash = "sha256:b292c8ef8b12ccd2ef8690715a5c3a7fe9b879e9b6e369bb9af4d4e33bbc53c5", size = 176720, upload-time = "2025-11-14T13:35:02.778Z" },
 ]
 
 [package.optional-dependencies]
@@ -672,10 +672,10 @@ falkordb = [
 
 [[package]]
 name = "graphiti-mcp-varming"
-version = "1.0.4"
+version = "1.0.6"
 source = { editable = "." }
 dependencies = [
-    { name = "graphiti-core" },
+    { name = "graphiti-core-varming" },
     { name = "mcp" },
     { name = "openai" },
     { name = "pydantic-settings" },
@@ -687,7 +687,7 @@ all = [
     { name = "anthropic" },
     { name = "azure-identity" },
     { name = "google-genai" },
-    { name = "graphiti-core", extra = ["falkordb"] },
+    { name = "graphiti-core-varming", extra = ["falkordb"] },
     { name = "groq" },
     { name = "sentence-transformers" },
     { name = "voyageai" },
@@ -702,7 +702,7 @@ azure = [
     { name = "azure-identity" },
 ]
 dev = [
-    { name = "graphiti-core" },
+    { name = "graphiti-core-varming" },
     { name = "httpx" },
     { name = "mcp" },
     { name = "pyright" },
@@ -711,7 +711,7 @@ dev = [
     { name = "ruff" },
 ]
 falkordb = [
-    { name = "graphiti-core", extra = ["falkordb"] },
+    { name = "graphiti-core-varming", extra = ["falkordb"] },
 ]
 providers = [
     { name = "anthropic" },
@@ -739,10 +739,10 @@ requires-dist = [
     { name = "google-genai", marker = "extra == 'all'", specifier = ">=1.8.0" },
     { name = "google-genai", marker = "extra == 'api-providers'", specifier = ">=1.8.0" },
     { name = "google-genai", marker = "extra == 'providers'", specifier = ">=1.8.0" },
-    { name = "graphiti-core", specifier = ">=0.16.0" },
-    { name = "graphiti-core", marker = "extra == 'dev'", specifier = ">=0.16.0" },
-    { name = "graphiti-core", extras = ["falkordb"], marker = "extra == 'all'", specifier = ">=0.16.0" },
-    { name = "graphiti-core", extras = ["falkordb"], marker = "extra == 'falkordb'", specifier = ">=0.16.0" },
+    { name = "graphiti-core-varming", specifier = ">=0.23.2" },
+    { name = "graphiti-core-varming", marker = "extra == 'dev'", specifier = ">=0.23.2" },
+    { name = "graphiti-core-varming", extras = ["falkordb"], marker = "extra == 'all'", specifier = ">=0.23.1" },
+    { name = "graphiti-core-varming", extras = ["falkordb"], marker = "extra == 'falkordb'", specifier = ">=0.23.2" },
     { name = "groq", marker = "extra == 'all'", specifier = ">=0.2.0" },
     { name = "groq", marker = "extra == 'api-providers'", specifier = ">=0.2.0" },
     { name = "groq", marker = "extra == 'providers'", specifier = ">=0.2.0" },
