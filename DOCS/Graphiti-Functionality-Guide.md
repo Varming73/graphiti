@@ -1,6 +1,8 @@
-# Graphiti Functionality Guide: Episodic Memory & Pattern Recognition
+# Graphiti Python Library Guide: Episodic Memory & Pattern Recognition
 
-**Target Use Case:** AI agent managing episodic memory (autobiography) for professional experiences, state changes, relationship events, and pattern recognition over time.
+**IMPORTANT:** This guide is for the **Python library API**. If you're using the **Graphiti MCP server** (for AI agents), see `Graphiti-MCP-Guide-Episodic-Memory.md` instead.
+
+**Target Use Case:** Python developers building episodic memory systems for professional experiences, state changes, relationship events, and pattern recognition over time.
 
 ---
 
