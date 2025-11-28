@@ -169,6 +169,3 @@ cache.db*
 
 # Serena AI assistant files (local only)
 .serena/
-
-# Documentation folder (local only)
-DOCS/
